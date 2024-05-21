@@ -1,4 +1,4 @@
-# obs-asio ![](https://img.shields.io/github/downloads/andersama/obs-asio/total?cacheSeconds=2678400) ![](https://img.shields.io/github/actions/workflow/status/andersama/obs-asio/main.yml)
+# obs-asio ![](https://img.shields.io/github/downloads/andersama/obs-asio/total?cacheSeconds=2678400) [![Plugin Build](https://github.com/Andersama/obs-asio/actions/workflows/main.yml/badge.svg)](https://github.com/Andersama/obs-asio/actions/workflows/main.yml)
 ![](/images/obs_icon_very_small.png)  ![](/images/TECH_ASIOsmall.png)
 
 ## ASIO plugin for OBS-Studio ##
