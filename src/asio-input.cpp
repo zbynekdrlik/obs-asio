@@ -25,6 +25,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <obs-module.h>
 #include <obs-frontend-api.h>
 #include <vector>
+#include <algorithm>
 //#include <JuceHeader.h>
 #include <juce_core/juce_core.h>
 #include <juce_audio_devices/juce_audio_devices.h>
@@ -159,12 +160,14 @@ private:
 public:
 	class AudioListener : public TimeSliceClient {
 	private:
+		static constexpr unsigned int client_mask = 0x1;
+		static constexpr unsigned int device_mask = 0x2;
 		std::vector<short> _route;
 		std::vector<short> _route_out;
 		obs_source_audio   in;
 		obs_source_t      *source;
 
-		bool     active;
+		unsigned int active;
 		int      read_index = 0;
 		int      wait_time  = 4;
 		AudioCB *callback;
@@ -205,7 +208,7 @@ public:
 	public:
 		AudioListener(obs_source_t *source, AudioCB *cb) : source(source), callback(cb)
 		{
-			active = true;
+			active = client_mask | device_mask;
 		}
 
 		~AudioListener()
@@ -215,12 +218,20 @@ public:
 
 		void disconnect()
 		{
-			active = false;
+			active &= device_mask;
 		}
 
 		void reconnect()
 		{
-			active = true;
+			active |= client_mask;
+		}
+
+		void device_disconnect() {
+			active &= client_mask;
+		}
+
+		void device_reconnect() {
+			active |= device_mask;
 		}
 
 		void setOutput(obs_source_audio o)
@@ -257,7 +268,7 @@ public:
 
 		int useTimeSlice()
 		{
-			if (!active || callback != current_callback)
+			if ((active & client_mask) == 0 || (active & device_mask) == 0 || callback != current_callback)
 				return -1;
 			int write_index = callback->write_index();
 			if (read_index == write_index)
@@ -281,6 +292,9 @@ public:
 			return wait_time;
 		}
 	};
+private:
+	std::vector<AudioListener *> _clients;
+public:
 
 	AudioIODevice *getDevice()
 	{
@@ -333,6 +347,17 @@ public:
 		if (!_thread)
 			_thread = global_thread;
 
+		bool found_client = false;
+		for (auto known_client : _clients) {
+			if (known_client == client) {
+				found_client = true;
+				break;
+			}
+		}
+		
+		if (!found_client)
+			_clients.push_back(client);
+		
 		client->setCurrentCallback(this);
 		client->setReadIndex(_write_index);
 		_thread->addTimeSliceClient(client);
@@ -340,6 +365,9 @@ public:
 
 	void remove_client(AudioListener *client)
 	{
+		auto it = std::remove(_clients.begin(), _clients.end(), client);
+		_clients.erase(it, _clients.end());
+
 		if (_thread)
 			_thread->removeTimeSliceClient(client);
 	}
@@ -383,10 +411,26 @@ public:
 		if (!_thread) {
 			_thread = global_thread;
 		} else {
+			/*
+   			// update clients with this device to use this callback
+			// BUGFIX: when pkv modified the source code to use one global thread
+			// this became bugged, originally
 			for (int i = 0; i < _thread->getNumClients(); i++) {
 				AudioListener *l = static_cast<AudioListener *>(_thread->getClient(i));
+				// this is one of this device's known clients
 				l->setCurrentCallback(this);
 			}
+			// was ok because _thread was unique to each AudioCB (the this pointer)
+			// I'm adding a redundant struct to keep track of the clients inside the AudioCB
+			*/
+			for (auto known_client : _clients) {
+				known_client->setCurrentCallback(this);
+				// if the device for whatever reason stopped, or errored out
+				// the clients will have been disabled by the device disconnecting
+				// since we're here, we can mark the device as being ok
+				known_client->device_reconnect();
+			}
+
 		}
 		if (!_thread->isThreadRunning())
 			_thread->startThread(10);
@@ -394,6 +438,10 @@ public:
 
 	void audioDeviceStopped()
 	{
+		for (auto known_client : _clients) {
+			known_client->device_disconnect();
+		}
+		
 		blog(LOG_INFO, "Stopped (%s)", _device->getName().toStdString().c_str());
 
 		std::string timestamp_string = std::to_string(last_audio_ts);
@@ -403,8 +451,19 @@ public:
 
 	void audioDeviceError(const juce::String &errorMessage)
 	{
+		/* BUGFIX: when pkv modified the source code to use one global thread
+		// this became bugged, originally
 		if (_thread)
 			_thread->stopThread(200);
+		// was ok because _thread was unique to each AudioCB (the this pointer)
+  		// now any device that sends an error effectively nukes all other processing
+    		// which likely will cause problems
+   		*/
+		// Instead we'll mark all clients as having the device disconnected
+		for (auto known_client : _clients) {
+			known_client->device_disconnect();
+		}
+		
 		std::string error = errorMessage.toStdString();
 		blog(LOG_ERROR, "Device Error!\n%s", error.c_str());
 
