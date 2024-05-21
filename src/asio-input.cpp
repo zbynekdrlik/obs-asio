@@ -141,7 +141,6 @@ private:
 	double           sample_rate;
 	TimeSliceThread *_thread       = nullptr;
 	uint64_t         last_audio_ts = 0;
-	std::vector<AudioListener *> _clients;
 
 public:
 	struct AudioBufferInfo {
@@ -293,6 +292,9 @@ public:
 			return wait_time;
 		}
 	};
+private:
+	std::vector<AudioListener *> _clients;
+public:
 
 	AudioIODevice *getDevice()
 	{
