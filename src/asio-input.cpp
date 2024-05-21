@@ -348,7 +348,7 @@ public:
 			_thread = global_thread;
 
 		bool found_client = false;
-		for (auto known_client : clients) {
+		for (auto known_client : _clients) {
 			if (known_client == client) {
 				found_client = true;
 				break;
@@ -356,7 +356,7 @@ public:
 		}
 		
 		if (!found_client)
-			clients.push_back(client);
+			_clients.push_back(client);
 		
 		client->setCurrentCallback(this);
 		client->setReadIndex(_write_index);
@@ -365,8 +365,8 @@ public:
 
 	void remove_client(AudioListener *client)
 	{
-		auto it = std::remove(clients.begin(), clients.end(), client);
-		clients.erase(it, clients.end());
+		auto it = std::remove(_clients.begin(), _clients.end(), client);
+		_clients.erase(it, _clients.end());
 
 		if (_thread)
 			_thread->removeTimeSliceClient(client);
@@ -423,7 +423,7 @@ public:
 			// was ok because _thread was unique to each AudioCB (the this pointer)
 			// I'm adding a redundant struct to keep track of the clients inside the AudioCB
 			*/
-			for (auto known_client : clients) {
+			for (auto known_client : _clients) {
 				known_client->setCurrentCallback(this);
 				// if the device for whatever reason stopped, or errored out
 				// the clients will have been disabled by the device disconnecting
@@ -438,7 +438,7 @@ public:
 
 	void audioDeviceStopped()
 	{
-		for (auto known_client : clients) {
+		for (auto known_client : _clients) {
 			known_client->device_disconnect();
 		}
 		
@@ -460,7 +460,7 @@ public:
     		// which likely will cause problems
    		*/
 		// Instead we'll mark all clients as having the device disconnected
-		for (auto known_client : clients) {
+		for (auto known_client : _clients) {
 			known_client->device_disconnect();
 		}
 		
