@@ -26,7 +26,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <obs-frontend-api.h>
 #include <vector>
 #include <algorithm>
-//#include <JuceHeader.h>
+// #include <JuceHeader.h>
 #include <juce_core/juce_core.h>
 #include <juce_audio_devices/juce_audio_devices.h>
 using namespace juce;
@@ -162,16 +162,16 @@ public:
 	private:
 		static constexpr unsigned int client_mask = 0x1;
 		static constexpr unsigned int device_mask = 0x2;
-		std::vector<short> _route;
-		std::vector<short> _route_out;
-		obs_source_audio   in;
-		obs_source_t      *source;
+		std::vector<short>            _route;
+		std::vector<short>            _route_out;
+		obs_source_audio              in;
+		obs_source_t                 *source;
 
 		unsigned int active;
-		int      read_index = 0;
-		int      wait_time  = 4;
-		AudioCB *callback;
-		AudioCB *current_callback;
+		int          read_index = 0;
+		int          wait_time  = 4;
+		AudioCB     *callback;
+		AudioCB     *current_callback;
 
 		size_t   silent_buffer_size = 0;
 		uint8_t *silent_buffer      = nullptr;
@@ -226,11 +226,13 @@ public:
 			active |= client_mask;
 		}
 
-		void device_disconnect() {
+		void device_disconnect()
+		{
 			active &= client_mask;
 		}
 
-		void device_reconnect() {
+		void device_reconnect()
+		{
 			active |= device_mask;
 		}
 
@@ -292,10 +294,11 @@ public:
 			return wait_time;
 		}
 	};
+
 private:
 	std::vector<AudioListener *> _clients;
-public:
 
+public:
 	AudioIODevice *getDevice()
 	{
 		return _device;
@@ -354,10 +357,10 @@ public:
 				break;
 			}
 		}
-		
+
 		if (!found_client)
 			_clients.push_back(client);
-		
+
 		client->setCurrentCallback(this);
 		client->setReadIndex(_write_index);
 		_thread->addTimeSliceClient(client);
@@ -412,7 +415,7 @@ public:
 			_thread = global_thread;
 		} else {
 			/*
-   			// update clients with this device to use this callback
+			// update clients with this device to use this callback
 			// BUGFIX: when pkv modified the source code to use one global thread
 			// this became bugged, originally
 			for (int i = 0; i < _thread->getNumClients(); i++) {
@@ -430,7 +433,6 @@ public:
 				// since we're here, we can mark the device as being ok
 				known_client->device_reconnect();
 			}
-
 		}
 		if (!_thread->isThreadRunning())
 			_thread->startThread(10);
@@ -441,7 +443,7 @@ public:
 		for (auto known_client : _clients) {
 			known_client->device_disconnect();
 		}
-		
+
 		blog(LOG_INFO, "Stopped (%s)", _device->getName().toStdString().c_str());
 
 		std::string timestamp_string = std::to_string(last_audio_ts);
@@ -456,14 +458,14 @@ public:
 		if (_thread)
 			_thread->stopThread(200);
 		// was ok because _thread was unique to each AudioCB (the this pointer)
-  		// now any device that sends an error effectively nukes all other processing
-    		// which likely will cause problems
-   		*/
+		// now any device that sends an error effectively nukes all other processing
+		// which likely will cause problems
+		*/
 		// Instead we'll mark all clients as having the device disconnected
 		for (auto known_client : _clients) {
 			known_client->device_disconnect();
 		}
-		
+
 		std::string error = errorMessage.toStdString();
 		blog(LOG_ERROR, "Device Error!\n%s", error.c_str());
 
