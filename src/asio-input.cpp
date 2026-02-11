@@ -26,6 +26,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <obs-frontend-api.h>
 #include <vector>
 #include <algorithm>
+#include <atomic>
+#include <Windows.h>
 // #include <JuceHeader.h>
 #include <juce_core/juce_core.h>
 #include <juce_audio_devices/juce_audio_devices.h>
@@ -46,6 +48,21 @@ OBS_MODULE_USE_DEFAULT_LOCALE("win-asio", "en-US")
 static void fill_out_devices(obs_property_t *prop);
 
 static juce::AudioIODeviceType *deviceTypeAsio = AudioIODeviceType::createAudioIODeviceType_ASIO();
+
+// Global clock offset for consistent timestamps across OBS restarts
+// This uses wall clock (NTP-synced) to provide stable timing reference
+static std::atomic<int64_t> g_clock_offset_ns{0};
+static std::atomic<bool> g_clock_offset_initialized{false};
+
+// Get wall clock time in nanoseconds (NTP-synced system time)
+static int64_t get_wall_clock_ns()
+{
+	FILETIME ft;
+	GetSystemTimePreciseAsFileTime(&ft);
+	uint64_t t = ((uint64_t)ft.dwHighDateTime << 32) | ft.dwLowDateTime;
+	// Convert from 100-nanosecond intervals since 1601 to nanoseconds since Unix epoch
+	return (int64_t)((t - 116444736000000000ULL) * 100);
+}
 
 class ASIOPlugin;
 class AudioCB;
@@ -331,7 +348,20 @@ public:
 	void audioDeviceIOCallback(const float **inputChannelData, int numInputChannels, float **outputChannelData,
 			int numOutputChannels, int numSamples)
 	{
-		uint64_t ts = os_gettime_ns();
+		// Initialize global clock offset once per OBS session
+		// This ensures consistent timestamps across OBS restarts when using NTP-synced clocks
+		if (!g_clock_offset_initialized.load(std::memory_order_acquire)) {
+			int64_t wall_now = get_wall_clock_ns();
+			uint64_t obs_now = os_gettime_ns();
+			g_clock_offset_ns.store(wall_now - (int64_t)obs_now, std::memory_order_release);
+			g_clock_offset_initialized.store(true, std::memory_order_release);
+			blog(LOG_INFO, "Global clock offset initialized: %lld ns", (long long)g_clock_offset_ns.load());
+		}
+
+		// Use wall clock converted to OBS time domain for consistent timing
+		int64_t wall_now = get_wall_clock_ns();
+		int64_t offset = g_clock_offset_ns.load(std::memory_order_acquire);
+		uint64_t ts = (uint64_t)(wall_now - offset);
 
 		for (int i = 0; i < numInputChannels; i++)
 			buffers[_write_index].buffer.copyFrom(i, 0, inputChannelData[i], numSamples);
